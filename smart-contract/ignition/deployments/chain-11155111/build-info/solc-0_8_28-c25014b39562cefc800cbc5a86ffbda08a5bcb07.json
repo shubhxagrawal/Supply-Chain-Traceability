@@ -1,0 +1,39 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-c25014b39562cefc800cbc5a86ffbda08a5bcb07",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/SupplyChain.sol": "project/contracts/SupplyChain.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/SupplyChain.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.20;\r\n\r\n/**\r\n * @title SupplyChain\r\n * @dev A smart contract to track an item's journey from farm to table.\r\n */\r\ncontract SupplyChain {\r\n    // A counter to generate unique item IDs\r\n    uint256 private _itemCounter;\r\n\r\n    // Enum to represent the state of an item in the supply chain\r\n    enum State {\r\n        Harvested,\r\n        Processed,\r\n        Shipped,\r\n        Received\r\n    }\r\n\r\n    // Struct to store a snapshot of an item's state at a point in time\r\n    struct TrackingRecord {\r\n        State state;\r\n        address actor;\r\n        uint256 timestamp;\r\n    }\r\n\r\n    // Struct to represent an item being tracked\r\n    struct Item {\r\n        uint256 id;\r\n        string name;\r\n        address owner;\r\n        State currentState;\r\n        TrackingRecord[] history;\r\n    }\r\n\r\n    // Mapping from an item's ID to the Item struct\r\n    mapping(uint256 => Item) public items;\r\n\r\n    // Event to be emitted whenever an item's state changes\r\n    event ItemStateChanged(\r\n        uint256 indexed itemId,\r\n        State newState,\r\n        address indexed actor,\r\n        uint256 timestamp\r\n    );\r\n\r\n    /**\r\n     * @dev Registers a new item when it is harvested.\r\n     * @param _name The name of the item (e.g., \"Batch of Arabica Coffee Beans\").\r\n     * @return The unique ID of the newly created item.\r\n     */\r\n    function itemHarvested(string memory _name) public returns (uint256) {\r\n        _itemCounter++;\r\n        uint256 newItemId = _itemCounter;\r\n        \r\n        Item storage newItem = items[newItemId];\r\n        newItem.id = newItemId;\r\n        newItem.name = _name;\r\n        newItem.owner = msg.sender;\r\n        newItem.currentState = State.Harvested;\r\n        \r\n        // Add the first record to its history\r\n        newItem.history.push(TrackingRecord({\r\n            state: State.Harvested,\r\n            actor: msg.sender,\r\n            timestamp: block.timestamp\r\n        }));\r\n        \r\n        emit ItemStateChanged(newItemId, State.Harvested, msg.sender, block.timestamp);\r\n        \r\n        return newItemId;\r\n    }\r\n\r\n    /**\r\n     * @dev Updates an item's state to 'Processed'.\r\n     * @param _itemId The ID of the item to update.\r\n     */\r\n    function itemProcessed(uint256 _itemId) public {\r\n        Item storage item = items[_itemId];\r\n        \r\n        require(item.id != 0, \"Item does not exist.\");\r\n        require(item.owner == msg.sender, \"Only the owner can process the item.\");\r\n        require(item.currentState == State.Harvested, \"Item must be in 'Harvested' state.\");\r\n        \r\n        item.currentState = State.Processed;\r\n        item.history.push(TrackingRecord({\r\n            state: State.Processed,\r\n            actor: msg.sender,\r\n            timestamp: block.timestamp\r\n        }));\r\n        \r\n        emit ItemStateChanged(_itemId, State.Processed, msg.sender, block.timestamp);\r\n    }\r\n    \r\n    /**\r\n     * @dev Updates an item's state to 'Shipped' and transfers ownership.\r\n     * @param _itemId The ID of the item to update.\r\n     * @param _newOwner The address of the recipient (e.g., a distributor or retailer).\r\n     */\r\n    function itemShipped(uint256 _itemId, address _newOwner) public {\r\n        Item storage item = items[_itemId];\r\n\r\n        require(item.id != 0, \"Item does not exist.\");\r\n        require(item.owner == msg.sender, \"Only the owner can ship the item.\");\r\n        require(item.currentState == State.Processed, \"Item must be in 'Processed' state.\");\r\n        require(_newOwner != address(0), \"Invalid new owner address.\");\r\n        \r\n        item.currentState = State.Shipped;\r\n        item.owner = _newOwner; // Ownership is transferred\r\n        item.history.push(TrackingRecord({\r\n            state: State.Shipped,\r\n            actor: msg.sender,\r\n            timestamp: block.timestamp\r\n        }));\r\n        \r\n        emit ItemStateChanged(_itemId, State.Shipped, msg.sender, block.timestamp);\r\n    }\r\n\r\n    /**\r\n     * @dev Updates an item's state to 'Received'.\r\n     * @param _itemId The ID of the item to update.\r\n     */\r\n    function itemReceived(uint256 _itemId) public {\r\n        Item storage item = items[_itemId];\r\n\r\n        require(item.id != 0, \"Item does not exist.\");\r\n        // Only the new owner (who it was shipped to) can mark it as received.\r\n        require(item.owner == msg.sender, \"Only the designated recipient can receive the item.\"); \r\n        require(item.currentState == State.Shipped, \"Item must be in 'Shipped' state.\");\r\n        \r\n        item.currentState = State.Received;\r\n        item.history.push(TrackingRecord({\r\n            state: State.Received,\r\n            actor: msg.sender,\r\n            timestamp: block.timestamp\r\n        }));\r\n        \r\n        emit ItemStateChanged(_itemId, State.Received, msg.sender, block.timestamp);\r\n    }\r\n\r\n    /**\r\n     * @dev Fetches the entire history of an item.\r\n     * @param _itemId The ID of the item to query.\r\n     * @return An array of TrackingRecord structs.\r\n     */\r\n    function getItemHistory(uint256 _itemId) public view returns (TrackingRecord[] memory) {\r\n        require(items[_itemId].id != 0, \"Item does not exist.\");\r\n        return items[_itemId].history;\r\n    }\r\n}"
+      }
+    }
+  }
+}
